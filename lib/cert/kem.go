@@ -1,8 +1,8 @@
 package cert
 
 import (
+	"bytes"
 	"crypto/aes"
-	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
 	"encoding/binary"
@@ -10,6 +10,12 @@ import (
 	"io"
 
 	"lukechampine.com/blake3"
+
+	"github.com/snowmerak/seal/lib/cert/aead"
+)
+
+var (
+	StartBytes = []byte{0x53, 0x45, 0x41, 0x4c}
 )
 
 type MasterKey struct {
@@ -25,6 +31,32 @@ func MakeMasterKey(key string) (*MasterKey, error) {
 	}
 
 	return &MasterKey{privateKey: dk}, nil
+}
+
+func (mk *MasterKey) writeStart(w io.Writer) error {
+	if _, err := w.Write(StartBytes); err != nil {
+		return fmt.Errorf("failed to write start bytes: %w", err)
+	}
+	return nil
+}
+
+func (mk *MasterKey) readStart(r io.ReadSeeker) error {
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to find start bytes: %w", err)
+		}
+
+		for i := 0; i < n-4; i++ {
+			if bytes.Equal(buf[i:i+4], StartBytes) {
+				if _, err := r.Seek(int64(i+4), io.SeekStart); err != nil {
+					return fmt.Errorf("failed to seek to start bytes: %w", err)
+				}
+				return nil
+			}
+		}
+	}
 }
 
 func (mk *MasterKey) deriveCipher(w io.Writer) ([]byte, error) {
@@ -69,7 +101,11 @@ func (mk *MasterKey) readCipher(r io.Reader) ([]byte, error) {
 	return sk, nil
 }
 
-func (mk *MasterKey) Encrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cipher.AEAD, error)) error {
+func (mk *MasterKey) Encrypt(w io.Writer, r io.Reader, aeadCon aead.Constructor) error {
+	if err := mk.writeStart(w); err != nil {
+		return fmt.Errorf("failed to write start bytes: %w", err)
+	}
+
 	sk, err := mk.deriveCipher(w)
 	if err != nil {
 		return fmt.Errorf("failed to derive cipher: %w", err)
@@ -129,7 +165,11 @@ func (mk *MasterKey) Encrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cip
 	return nil
 }
 
-func (mk *MasterKey) Decrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cipher.AEAD, error)) error {
+func (mk *MasterKey) Decrypt(w io.Writer, r io.ReadSeeker, aeadCon aead.Constructor) error {
+	if err := mk.readStart(r); err != nil {
+		return fmt.Errorf("failed to read start bytes: %w", err)
+	}
+
 	sk, err := mk.readCipher(r)
 	if err != nil {
 		return fmt.Errorf("failed to read cipher: %w", err)
