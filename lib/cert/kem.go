@@ -1,6 +1,7 @@
 package cert
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
@@ -74,6 +75,11 @@ func (mk *MasterKey) Encrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cip
 		return fmt.Errorf("failed to derive cipher: %w", err)
 	}
 
+	ecb, err := aes.NewCipher(sk[:32])
+	if err != nil {
+		return fmt.Errorf("failed to create cipher: %w", err)
+	}
+
 	aead, err := aeadCon(sk)
 	if err != nil {
 		return fmt.Errorf("failed to create AEAD: %w", err)
@@ -86,11 +92,15 @@ func (mk *MasterKey) Encrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cip
 		return fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
+	encryptedNonce := make([]byte, ecb.BlockSize())
+	copy(encryptedNonce, nonce)
+	ecb.Encrypt(encryptedNonce, encryptedNonce)
+
 	binary.BigEndian.PutUint64(lengthBuf[:8], uint64(len(nonce)))
 	if _, err := w.Write(lengthBuf[:8]); err != nil {
 		return fmt.Errorf("failed to write nonce length: %w", err)
 	}
-	if _, err := w.Write(nonce); err != nil {
+	if _, err := w.Write(encryptedNonce); err != nil {
 		return fmt.Errorf("failed to write nonce: %w", err)
 	}
 
@@ -125,6 +135,11 @@ func (mk *MasterKey) Decrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cip
 		return fmt.Errorf("failed to read cipher: %w", err)
 	}
 
+	ecb, err := aes.NewCipher(sk[:32])
+	if err != nil {
+		return fmt.Errorf("failed to create cipher: %w", err)
+	}
+
 	aead, err := aeadCon(sk)
 	if err != nil {
 		return fmt.Errorf("failed to create AEAD: %w", err)
@@ -132,13 +147,17 @@ func (mk *MasterKey) Decrypt(w io.Writer, r io.Reader, aeadCon func([]byte) (cip
 
 	lengthBuf := [8]byte{}
 	if _, err := r.Read(lengthBuf[:8]); err != nil {
-		return fmt.Errorf("failed to read nonce length: %w", err)
+		return fmt.Errorf("failed to read encryptedNonce length: %w", err)
 	}
 
-	nonce := make([]byte, binary.BigEndian.Uint64(lengthBuf[:8]))
-	if _, err := io.ReadFull(r, nonce); err != nil {
-		return fmt.Errorf("failed to read nonce: %w", err)
+	encryptedNonce := make([]byte, ecb.BlockSize())
+	if _, err := io.ReadFull(r, encryptedNonce); err != nil {
+		return fmt.Errorf("failed to read encrypted nonce: %w", err)
 	}
+
+	ecb.Decrypt(encryptedNonce, encryptedNonce)
+	nonce := make([]byte, aead.NonceSize())
+	copy(nonce, encryptedNonce)
 
 	dataBuf := make([]byte, 4096)
 loop:
