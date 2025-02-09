@@ -1,4 +1,4 @@
-package cert_test
+package sealing_test
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/snowmerak/seal/lib/cert"
+	"github.com/snowmerak/seal/lib/sealing"
 )
 
 func TestMasterKey(t *testing.T) {
 	const password = "nzsNs2zqxM4SlsfI3MlaQ3QTYM1sEgbpPUv4"
 
-	mk, err := cert.MakeMasterKey(password)
+	mk, err := sealing.MakeMasterKey(password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestMasterKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mk, err = cert.MakeMasterKey(password)
+	mk, err = sealing.MakeMasterKey(password)
 	if err != nil {
 		t.Fatal(err)
 	}

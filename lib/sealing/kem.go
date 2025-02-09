@@ -1,4 +1,4 @@
-package cert
+package sealing
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 
 	"lukechampine.com/blake3"
 
-	"github.com/snowmerak/seal/lib/cert/aead"
+	"github.com/snowmerak/seal/lib/sealing/aead"
 )
 
 var (

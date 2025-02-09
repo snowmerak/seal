@@ -1,4 +1,4 @@
-package cert
+package sealing
 
 import "errors"
 
