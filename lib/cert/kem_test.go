@@ -39,7 +39,7 @@ func TestMasterKey(t *testing.T) {
 	}
 
 	decrypted := bytes.NewBuffer(nil)
-	if err := mk.Decrypt(decrypted, encrypted, func(key []byte) (cipher.AEAD, error) {
+	if err := mk.Decrypt(decrypted, bytes.NewReader(encrypted.Bytes()), func(key []byte) (cipher.AEAD, error) {
 		block, err := aes.NewCipher(key[:32])
 		if err != nil {
 			return nil, err
